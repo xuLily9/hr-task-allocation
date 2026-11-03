@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human–Robot Allocation Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:wght@600&display=swap">
+<style>
+:root {
+  /* Layout: controls in a left rail, results (tiles → timeline → table) on the right */
+  --bg: #F5F4EF;
+  --panel: #FFFFFF;
+  --ink: #18223A;
+  --muted: #5B6577;
+  --line: #DEDAD0;
+  --accent: #9A4F12;
+  --lane: #ECE9E1;
+  --w: #F0B66B;   --w-ink: #1B2433;
+  --r: #1F3F66;   --r-ink: #F7F6F2;
+  --hr: #6A5A9E;  --hr-ink: #F7F6F2;
+  --ok: #2F7D4F;  --bad: #B23A2E;
+  --font-display: "Source Serif 4", Georgia, serif;
+  --font-body: "IBM Plex Sans", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "Courier New", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161F; --panel: #1A202C; --ink: #E8EAF0; --muted: #A2AABA; --line: #2E3646;
+    --accent: #F2A65A; --lane: #232A38; --r: #4C7BB8; --hr: #8F7FC8; --ok: #5FBF85; --bad: #E77B6E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161F; --panel: #1A202C; --ink: #E8EAF0; --muted: #A2AABA; --line: #2E3646;
+  --accent: #F2A65A; --lane: #232A38; --r: #4C7BB8; --hr: #8F7FC8; --ok: #5FBF85; --bad: #E77B6E;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 40px; display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
+header { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 28px; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 75ch; }
+aside, section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+aside { padding: 18px; display: flex; flex-direction: column; gap: 18px; align-self: start; }
+.group { display: flex; flex-direction: column; gap: 10px; }
+.group h2 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0; font-weight: 600; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.row label { font-weight: 500; }
+.stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stepper button { width: 34px; height: 32px; border: 0; background: var(--lane); color: var(--ink); font-size: 18px; cursor: pointer; }
+.stepper button:hover { background: var(--line); }
+.stepper output { width: 40px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.flow { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; counter-reset: s; }
+.flow li { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 10px 40px; display: flex; flex-direction: column; counter-increment: s; }
+.flow li::before { content: counter(s); position: absolute; left: 12px; top: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--bg); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.flow li:not(:last-child)::after { content: "→"; position: absolute; right: -10px; top: 50%; transform: translate(50%, -50%); color: var(--accent); font-weight: 700; z-index: 1; }
+.flow li span { color: var(--muted); font-size: 13px; }
+.flow li.out { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.flow li.out span { color: var(--bg); opacity: .8; }
+.scen { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.mini { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); cursor: pointer; text-align: left; font: inherit; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
+.mini:hover, .mini:focus-visible { border-color: var(--accent); }
+.mini .t { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.mini .chg { color: var(--accent); font-size: 13px; font-weight: 600; min-height: 1.4em; }
+.mini svg { width: 100%; height: auto; display: block; }
+.bars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 14px; }
+.bars h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin: 0 0 6px; }
+.brow { display: grid; grid-template-columns: 18px 1fr 54px; gap: 6px; align-items: center; font-size: 13px; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+.brow i { display: block; height: 14px; border-radius: 3px; background: var(--ink); }
+.brow .n { text-align: right; color: var(--muted); }
+@media (max-width: 860px) { .flow { grid-template-columns: 1fr 1fr; } .flow li::after { display: none; } .scen, .bars { grid-template-columns: 1fr; } }
+.filebtn { display: block; text-align: center; border: 1px dashed var(--accent); color: var(--accent); background: var(--panel); border-radius: 8px; padding: 9px; cursor: pointer; font-weight: 600; }
+.filebtn:hover { background: var(--lane); }
+.projbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.projbar a, .projbar button { flex: 1; text-align: center; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 7px 6px; cursor: pointer; font: inherit; font-size: 14px; text-decoration: none; }
+.projbar a { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }
+.hint.err { color: var(--bad); }
+.engine { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; }
+.engine b { font-weight: 600; }
+#engine-text { flex: 1 1 320px; min-width: 0; }
+.engine .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.engine.on .dot { background: var(--ok); } .engine.off .dot { background: var(--accent); }
+.engine button { margin-left: auto; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 4px 10px; cursor: pointer; font: inherit; }
+.seg { display: grid; grid-template-columns: 36px 36px 36px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; padding: 7px 6px; background: transparent; color: var(--ink); cursor: pointer; font: inherit; }
+.seg button:disabled { opacity: .4; cursor: not-allowed; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
+.presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.presets button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 7px 0; cursor: pointer; font: inherit; font-weight: 600; }
+.presets button:hover { border-color: var(--accent); }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.slider span.v { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.slider input { grid-column: 1 / -1; }
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.tile .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.tile .v { font-family: var(--font-display); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .v small { font-family: var(--font-body); font-size: 14px; color: var(--muted); font-weight: 400; }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.pill.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.pill.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+section.card { padding: 16px 18px; }
+section.card h2 { font-size: 16px; margin: 0 0 4px; }
+section.card .sub { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.ic { width: 18px; height: 18px; vertical-align: -3px; color: var(--ink); flex: none; }
+.legend .ic { margin-right: 4px; }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+.gantt { overflow-x: auto; }
+.gantt svg { display: block; min-width: 640px; width: 100%; height: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+td.num, th.num { text-align: right; }
+td.best { font-weight: 700; }
+.chip { display: inline-block; min-width: 34px; text-align: center; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+.chip.W { background: var(--w); color: var(--w-ink); } .chip.R { background: var(--r); color: var(--r-ink); } .chip.HR { background: var(--hr); color: var(--hr-ink); }
+.tablewrap { overflow-x: auto; }
+details summary { cursor: pointer; font-weight: 600; }
+footer { grid-column: 1 / -1; color: var(--muted); font-size: 13px; }
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) { .bar { transition: opacity .2s; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-worker" viewBox="0 0 24 24"><path d="M5.5 10.5a6.5 6.5 0 0 1 13 0z" fill="currentColor"/><rect x="3.5" y="10" width="17" height="2.2" rx="1.1" fill="currentColor"/><circle cx="12" cy="15.2" r="3" fill="currentColor"/><path d="M4.5 24c0-3.6 3.3-5.6 7.5-5.6s7.5 2 7.5 5.6z" fill="currentColor"/></symbol>
+  <symbol id="i-robot" viewBox="0 0 24 24"><rect x="2.5" y="20" width="11" height="3" rx="1" fill="currentColor"/><path d="M8 20V13.5L15.5 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="13.5" r="2.3" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1.9" fill="currentColor"/><path d="M15.5 7.5L20 4.8M15.5 7.5L19.3 10.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+<div class="wrap">
+  <header>
+    <h1>Human–robot allocation explorer</h1>
+    <p>Change the crew, the safety rules or the weights, and the best plan is redrawn. Illustrative data from the WP5 worked example. Run locally with <code>python app.py</code> (next to <code>allocate.py</code>) to solve with CP-SAT.</p>
+    <ol class="flow" aria-label="How the plan is computed">
+      <li><b>Expert weights</b><span>w(j), BWM, C1–C7</span></li>
+      <li><b>Cost per option</b><span>C(i,k) = Σ w·s</span></li>
+      <li><b>Hard rules</b><span>feasibility, precedence, safety</span></li>
+      <li><b>Search</b><span>CP-SAT, or in-browser</span></li>
+      <li class="out"><b>Plan</b><span>who does what, when</span></li>
+    </ol>
+  </header>
+
+  <aside aria-label="Settings">
+    <div class="group">
+      <h2>Your project (Excel)</h2>
+      <label class="filebtn" for="proj-file">Load project Excel…</label>
+      <input type="file" id="proj-file" accept=".xlsx" hidden>
+      <p class="hint" id="proj-status">Fill in project_template.xlsx, then load it here. Works when the page is opened with <code>python app.py</code>.</p>
+      <div class="projbar" id="proj-actions" hidden>
+        <a id="proj-download" href="/project/result.xlsx">Download result Excel</a>
+        <button type="button" id="proj-exit">Back to example</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2 id="preset-h">Scenario rules</h2>
+      <div class="presets">
+        <button type="button" data-preset="A" title="Weighted cost only">A</button>
+        <button type="button" data-preset="B" title="Cost + makespan">B</button>
+        <button type="button" data-preset="C" title="B + zone rule">C</button>
+        <button type="button" data-preset="D" title="C + exposure cap 40 min">D</button>
+      </div>
+      <p class="hint">A cost only · B + makespan · C + zone rule · D + exposure cap. Only the rules change; crew and weights stay.</p>
+    </div>
+
+    <div class="group">
+      <h2>Crew and work</h2>
+      <div class="row"><label id="lw"><svg class="ic" aria-hidden="true"><use href="#i-worker"/></svg> Workers</label>
+        <div class="stepper" role="group" aria-labelledby="lw"><button type="button" id="w-dec" aria-label="Fewer workers">−</button><output id="w-val">1</output><button type="button" id="w-inc" aria-label="More workers">+</button></div></div>
+      <div class="row"><label id="lr"><svg class="ic" aria-hidden="true"><use href="#i-robot"/></svg> Robots</label>
+        <div class="stepper" role="group" aria-labelledby="lr"><button type="button" id="r-dec" aria-label="Fewer robots">−</button><output id="r-val">1</output><button type="button" id="r-inc" aria-label="More robots">+</button></div></div>
+      <div class="row" id="panels-row"><label id="lp">Panels</label>
+        <div class="stepper" role="group" aria-labelledby="lp"><button type="button" id="p-dec" aria-label="Fewer panels">−</button><output id="p-val">1</output><button type="button" id="p-inc" aria-label="More panels">+</button></div></div>
+      <p class="hint" id="panels-hint"></p>
+    </div>
+
+    <div class="group">
+      <h2>Objective and safety rules</h2>
+      <div class="slider"><label for="lam">λ, weight on makespan</label><span class="v" id="lam-v"></span>
+        <input type="range" id="lam" min="0" max="0.1" step="0.005" value="0.03"></div>
+      <label class="switch"><input type="checkbox" id="zone"> Zone rule: worker alone and robot alone never at the same time</label>
+      <label class="switch"><input type="checkbox" id="capOn"> Cap total worker exposure</label>
+      <div class="slider"><label for="cap">Exposure cap</label><span class="v" id="cap-v"></span>
+        <input type="range" id="cap" min="10" max="150" step="5" value="40"></div>
+    </div>
+
+    <div class="group">
+      <h2>Criterion weights (normalised to sum 1)</h2>
+      <div id="weights" class="group"></div>
+      <button type="button" id="resetW" class="presets" style="display:block;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:7px;cursor:pointer;font:inherit">Reset weights</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="engine" id="engine" role="status"><span class="dot"></span><span id="engine-text">Connecting to the CP-SAT server…</span><button type="button" id="retry">Retry CP-SAT</button></div>
+    <div class="tiles">
+      <div class="tile"><div class="k">Status</div><div class="v" id="t-status"></div></div>
+      <div class="tile"><div class="k">Makespan</div><div class="v" id="t-ms"></div></div>
+      <div class="tile"><div class="k">Weighted cost Σ C</div><div class="v" id="t-cost"></div></div>
+      <div class="tile"><div class="k">Worker exposure</div><div class="v" id="t-exp"></div></div>
+    </div>
+
+    <section class="card" aria-label="Timeline">
+      <h2>Timeline of the best plan</h2>
+      <p class="sub" id="gantt-sub"></p>
+      <div class="legend"><span><i style="background:var(--w)"></i><svg class="ic" aria-hidden="true"><use href="#i-worker"/></svg>W worker alone</span><span><i style="background:var(--r)"></i><svg class="ic" aria-hidden="true"><use href="#i-robot"/></svg>R robot alone</span><span><i style="background:var(--hr)"></i><svg class="ic" aria-hidden="true"><use href="#i-worker"/></svg><svg class="ic" aria-hidden="true"><use href="#i-robot"/></svg>HR human–robot team (one worker + one robot)</span></div>
+      <div class="gantt" id="gantt"></div>
+    </section>
+
+    <section class="card" aria-label="Scenario comparison" id="scen-card">
+      <h2>Scenarios A–D side by side</h2>
+      <p class="sub" id="scen-sub"></p>
+      <div class="scen" id="scen"></div>
+      <div class="bars" id="bars"></div>
+    </section>
+
+    <section class="card" aria-label="Plan details">
+      <h2>Plan details</h2>
+      <p class="sub">Which option and executor each sub-task gets, with its cost C(i,k) and the worker’s minutes in the hazard zone.</p>
+      <div class="tablewrap"><table id="plan"></table></div>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary>Cost table C(i,k) under the current weights</summary>
+        <p class="sub" style="margin-top:8px">C(i,k) = Σ w(j) · s(i,j,k) over C1–C7. Lower is better; bold marks the lowest option per task. A dash means the option cannot do the task.</p>
+        <div class="tablewrap"><table id="costs"></table></div>
+      </details>
+    </section>
+  </main>
+
+  <footer>Model: min Σ C(i,k)·x(i,k) + λ·makespan, subject to one option per task, feasibility, precedence (T1 before T2 and T3 of the same panel), no double booking of workers or robots, and the selected safety rules. Illustrative data; replace with expert weights (BWM) and case data.</footer>
+</div>
+
+<script>
+// ---- Data (illustrative, same as hr_task_allocation_cpsat.py) ----
+const MODES = ["W", "R", "HR"];
+const USES_WORKER = { W: true, R: false, HR: true };
+const USES_ROBOT = { W: false, R: true, HR: true };
+const COST_RATE = { W: 0.6, R: 1.0, HR: 1.6 };
+const CRITERIA = [
+  ["C1", "Task duration"], ["C2", "Cost"], ["C3", "Safety risk exposure"],
+  ["C4", "Physical demand and fatigue"], ["C5", "Cognitive workload"],
+  ["C6", "Task complexity"], ["C7", "Standardisation and supervisability"],
+];
+const DEFAULT_WEIGHTS = { C1: 0.15, C2: 0.10, C3: 0.30, C4: 0.15, C5: 0.10, C6: 0.10, C7: 0.10 };
+
+// Base sub-tasks of one panel. null = option not feasible.
+const BASE = [
+  { key: "T1", name: "lift panel",
+    dur: { W: 60, R: 40, HR: 35 }, exp: { W: 60, R: 5, HR: 20 },
+    C3: [0.8, 0.3, 0.4], C4: [0.9, 0.1, 0.3], C5: [0.4, 0.2, 0.5], C6: [0.5, 0.4, 0.6], C7: [0.5, 0.2, 0.3] },
+  { key: "T2", name: "align panel",
+    dur: { W: 30, R: null, HR: 25 }, exp: { W: 10, R: null, HR: 10 },
+    C3: [0.2, null, 0.3], C4: [0.3, null, 0.2], C5: [0.6, null, 0.5], C6: [0.7, null, 0.6], C7: [0.2, null, 0.3] },
+  { key: "T3", name: "fix bolts",
+    dur: { W: 50, R: 40, HR: 30 }, exp: { W: 20, R: 5, HR: 15 },
+    C3: [0.2, 0.2, 0.3], C4: [0.5, 0.1, 0.2], C5: [0.3, 0.2, 0.4], C6: [0.3, 0.3, 0.5], C7: [0.6, 0.1, 0.3] },
+];
+
+function buildTasks(panels) {
+  const tasks = [];
+  const suffix = panels === 1 ? [""] : ["A", "B", "C"].slice(0, panels);
+  suffix.forEach((s, p) => {
+    BASE.forEach((b) => {
+      const preds = b.key === "T1" ? [] : [tasks.length - (b.key === "T2" ? 1 : 2)];
+      tasks.push({ ...b, id: b.key + s, label: `${b.key}${s} ${b.name}`, preds, panel: p });
+    });
+  });
+  return tasks;
+}
+
+function costTable(tasks, weights) {
+  let maxDur = 0, maxCost = 0;
+  for (const t of tasks) for (const m of MODES) if (t.dur[m] != null) {
+    maxDur = Math.max(maxDur, t.dur[m]);
+    maxCost = Math.max(maxCost, COST_RATE[m] * t.dur[m]);
+  }
+  const wsum = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
+  return tasks.map((t) => {
+    const row = {};
+    MODES.forEach((m, idx) => {
+      if (t.dur[m] == null) { row[m] = null; return; }
+      const s = {
+        C1: t.dur[m] / maxDur, C2: (COST_RATE[m] * t.dur[m]) / maxCost,
+        C3: t.C3[idx], C4: t.C4[idx], C5: t.C5[idx], C6: t.C6[idx], C7: t.C7[idx],
+      };
+      let c = 0;
+      for (const k in weights) c += (weights[k] / wsum) * s[k];
+      row[m] = { cost: c, scores: s };
+    });
+    return row;
+  });
+}
+
+// Topological orders of the tasks (precedence respected).
+function topoOrders(tasks) {
+  const n = tasks.length, out = [], used = new Array(n).fill(false), cur = [];
+  (function rec() {
+    if (cur.length === n) { out.push(cur.slice()); return; }
+    for (let i = 0; i < n; i++) {
+      if (used[i] || !tasks[i].preds.every((p) => used[p])) continue;
+      used[i] = true; cur.push(i); rec(); cur.pop(); used[i] = false;
+    }
+  })();
+  return out;
+}
+
+const overlaps = (a, b) => a.s < b.e && b.s < a.e;
+
+// Earliest-start insertion schedule for a fixed option assignment and task order.
+function schedule(tasks, modes, order, nW, nR, zone) {
+  const wLanes = Array.from({ length: nW }, () => []);
+  const rLanes = Array.from({ length: nR }, () => []);
+  const placed = new Array(tasks.length);
+  const all = [];
+  for (const i of order) {
+    const m = modes[i], d = tasks[i].dur[m];
+    const ready = Math.max(0, ...tasks[i].preds.map((p) => placed[p].e));
+    const cands = [ready, ...all.map((x) => x.e).filter((e) => e > ready)].sort((a, b) => a - b);
+    let done = false;
+    for (const s of cands) {
+      const iv = { s, e: s + d };
+      let w = -1, r = -1;
+      if (USES_WORKER[m]) { w = wLanes.findIndex((l) => l.every((x) => !overlaps(x, iv))); if (w < 0) continue; }
+      if (USES_ROBOT[m]) { r = rLanes.findIndex((l) => l.every((x) => !overlaps(x, iv))); if (r < 0) continue; }
+      if (zone && (m === "W" || m === "R")) {
+        const other = m === "W" ? "R" : "W";
+        if (all.some((x) => x.mode === other && overlaps(x, iv))) continue;
+      }
+      const rec = { ...iv, task: i, mode: m, w, r };
+      if (w >= 0) wLanes[w].push(rec);
+      if (r >= 0) rLanes[r].push(rec);
+      placed[i] = rec; all.push(rec); done = true; break;
+    }
+    if (!done) return null;
+  }
+  return { items: placed, makespan: Math.max(...placed.map((p) => p.e)) };
+}
+
+// Critical-path lower bound on makespan for given options.
+function cpBound(tasks, modes) {
+  const fin = [];
+  tasks.forEach((t, i) => { fin[i] = Math.max(0, ...t.preds.map((p) => fin[p])) + t.dur[modes[i]]; });
+  return Math.max(...fin);
+}
+
+function solve(cfg) {
+  const { tasks, weights, nW, nR, lam, zone, cap } = cfg;
+  const table = costTable(tasks, weights);
+  const orders = topoOrders(tasks);
+  const n = tasks.length;
+  let best = null, checked = 0;
+  const modes = new Array(n);
+  const L = Math.round(1000 * lam);
+  (function rec(i, costInt, expo) {
+    if (cap != null && expo > cap) return;
+    if (i === n) {
+      if (best && costInt + L * cpBound(tasks, modes) >= best.obj) return;
+      for (const ord of orders) {
+        checked++;
+        const sch = schedule(tasks, modes, ord, nW, nR, zone);
+        if (!sch) continue;
+        const obj = costInt + L * sch.makespan;
+        if (!best || obj < best.obj || (obj === best.obj && sch.makespan < best.makespan)) {
+          best = { obj, costInt, modes: modes.slice(), ...sch, expo };
+        }
+      }
+      return;
+    }
+    for (const m of MODES) {
+      const c = table[i][m];
+      if (!c) continue;
+      if (USES_ROBOT[m] && nR === 0) continue;
+      if (USES_WORKER[m] && nW === 0) continue;
+      modes[i] = m;
+      rec(i + 1, costInt + Math.round(1000 * c.cost), expo + tasks[i].exp[m]);
+    }
+  })(0, 0, 0);
+  if (best) best.cost = best.costInt / 1000;
+  return { best, checked, table };
+}
+
+
+
+</script>
+<script>
+const state = { project: null, nW: 1, nR: 1, panels: 1, lam: 0.03, zone: false, capOn: false, cap: 40, weights: { ...DEFAULT_WEIGHTS } };
+const $ = (id) => document.getElementById(id);
+const COL = { W: "var(--w)", R: "var(--r)", HR: "var(--hr)" };
+const INK = { W: "var(--w-ink)", R: "var(--r-ink)", HR: "var(--hr-ink)" };
+
+function buildWeightSliders() {
+  const box = $("weights"); box.innerHTML = "";
+  CRITERIA.forEach(([k, name]) => {
+    const d = document.createElement("div"); d.className = "slider";
+    d.innerHTML = `<label for="w-${k}">${k} ${name}</label><span class="v" id="wv-${k}"></span>
+      <input type="range" id="w-${k}" min="0" max="0.6" step="0.01" value="${state.weights[k]}">`;
+    box.appendChild(d);
+    d.querySelector("input").addEventListener("input", (e) => { state.weights[k] = +e.target.value; syncControls(); scheduleRender(); });
+  });
+}
+
+function syncControls() {
+  $("w-val").textContent = state.nW; $("r-val").textContent = state.nR;
+  $("p-val").textContent = state.panels;
+  const pj = state.project;
+  $("panels-row").hidden = $("panels-hint").hidden = !!(pj && !pj.hasPanels);
+  $("panels-hint").textContent = pj ? `Each panel repeats ${pj.perPanel} tasks from your Excel (Per panel = Yes).`
+    : "Each panel has 3 sub-tasks." + (server === true ? "" : " 3 panels need the CP-SAT server."); $("preset-h").textContent = state.project ? "Scenario rules for your project" : "Scenario rules";
+  $("lam").value = state.lam; $("lam-v").textContent = state.lam.toFixed(3) + " / min";
+  $("zone").checked = state.zone; $("capOn").checked = state.capOn;
+  $("cap").value = state.cap; $("cap").disabled = !state.capOn;
+  $("cap-v").textContent = state.cap + " min" + (state.capOn ? "" : " (off)");
+  const sum = Object.values(state.weights).reduce((a, b) => a + b, 0) || 1;
+  CRITERIA.forEach(([k]) => { $("w-" + k).value = state.weights[k]; $("wv-" + k).textContent = (state.weights[k] / sum).toFixed(2); });
+}
+
+function niceMax(ms) { return Math.max(60, Math.ceil(ms / 10) * 10); }
+
+function drawGantt(tasks, best) {
+  const lanes = [];
+  for (let i = 0; i < state.nW; i++) lanes.push({ kind: "w", idx: i, label: `Worker ${i + 1}` });
+  for (let i = 0; i < state.nR; i++) lanes.push({ kind: "r", idx: i, label: `Robot ${i + 1}` });
+  const W = 900, left = 92, right = 16, top = 8, laneH = 40, gap = 8, axis = 30;
+  const H = top + lanes.length * (laneH + gap) + axis;
+  const tMax = niceMax(best.makespan), sx = (W - left - right) / tMax;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Timeline: makespan ${best.makespan} minutes">`;
+  for (let t = 0; t <= tMax; t += 5) {
+    const x = left + t * sx, major = t % 10 === 0;
+    s += `<line x1="${x}" y1="${top}" x2="${x}" y2="${H - axis + 4}" stroke="var(--line)" stroke-width="${major ? 1 : 0.5}" ${major ? "" : 'stroke-dasharray="2 3"'}/>`;
+    if (t % (tMax > 120 ? 20 : 10) === 0) s += `<text x="${x}" y="${H - 10}" font-size="12" fill="var(--muted)" text-anchor="middle" font-family="IBM Plex Mono, monospace">${t}</text>`;
+  }
+  s += `<text x="${left - 8}" y="${H - 10}" font-size="12" fill="var(--muted)" text-anchor="end">min</text>`;
+  lanes.forEach((ln, li) => {
+    const y = top + li * (laneH + gap);
+    s += `<rect x="${left}" y="${y}" width="${W - left - right}" height="${laneH}" rx="6" fill="var(--lane)"/>`;
+    s += `<use href="#i-${ln.kind === "w" ? "worker" : "robot"}" x="2" y="${y + laneH / 2 - 10}" width="20" height="20" style="color:var(--muted)"/>`;
+    s += `<text x="${left - 10}" y="${y + laneH / 2 + 5}" font-size="13" fill="var(--ink)" text-anchor="end" font-weight="500">${ln.label}</text>`;
+    best.items.forEach((it) => {
+      const on = (ln.kind === "w" && it.w === ln.idx) || (ln.kind === "r" && it.r === ln.idx);
+      if (!on) return;
+      const x = left + it.s * sx + 1, w = Math.max(2, (it.e - it.s) * sx - 2);
+      const lbl = `${tasks[it.task].id} · ${it.mode}`;
+      s += `<g class="bar"><title>${tasks[it.task].label}: ${it.mode}, ${it.s}–${it.e} min</title>`;
+      s += `<rect x="${x}" y="${y + 3}" width="${w}" height="${laneH - 6}" rx="5" fill="${COL[it.mode]}"/>`;
+      if (w > 46) s += `<text x="${x + w / 2}" y="${y + laneH / 2 + 5}" font-size="13" font-weight="600" fill="${INK[it.mode]}" text-anchor="middle">${lbl}</text>`;
+      s += `</g>`;
+    });
+  });
+  s += `<line x1="${left + best.makespan * sx}" y1="${top - 4}" x2="${left + best.makespan * sx}" y2="${H - axis + 4}" stroke="var(--accent)" stroke-width="2"/>`;
+  return s + `</svg>`;
+}
+
+let server = null;        // null = unknown, true = CP-SAT reachable, false = not reachable
+let reqSeq = 0, timer = null, serverError = "";
+
+function scheduleRender() { clearTimeout(timer); timer = setTimeout(render, 150); }
+
+function setEngine(kind, text) {
+  const e = $("engine"); e.className = "engine " + kind; $("engine-text").innerHTML = text;
+  $("retry").hidden = kind === "on";
+}
+
+async function callServer(tasks, table, over = {}) {
+  const body = {
+    tasks: tasks.map((t, i) => ({
+      id: t.id, preds: t.preds, dur: t.dur, exp: t.exp,
+      cost: Object.fromEntries(MODES.filter((m) => table[i][m]).map((m) => [m, Math.round(1000 * table[i][m].cost)])),
+    })),
+    nW: state.nW, nR: state.nR, lam: Math.round(1000 * (over.lam ?? state.lam)),
+    zone: over.zone ?? state.zone, cap: "cap" in over ? over.cap : (state.capOn ? state.cap : null),
+  };
+  const res = await fetch("/solve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const out = await res.json().catch(() => { throw new TypeError("no local server"); });  // static host: HTML, not JSON
+  if (!res.ok) throw new Error(out.error || "server error");
+  return out;
+}
+
+function showResult(tasks, table, b, statusHtml, sub) {
+  if (!b) {
+    $("t-status").innerHTML = statusHtml;
+    ["t-ms", "t-cost", "t-exp"].forEach((id) => ($(id).textContent = "–"));
+    $("gantt").innerHTML = `<p class="hint">No plan meets the rules. Raise the exposure cap, add a worker or robot, or switch off a safety rule.</p>`;
+    $("gantt-sub").textContent = ""; $("plan").innerHTML = "";
+    return;
+  }
+  $("t-status").innerHTML = statusHtml;
+  $("t-ms").innerHTML = `${b.makespan}<small> min</small>`;
+  $("t-cost").textContent = (b.costInt / 1000).toFixed(3);
+  $("t-exp").innerHTML = `${b.expo}<small> min${state.capOn ? " of " + state.cap : ""}</small>`;
+  $("gantt-sub").textContent = `${state.nW} worker${state.nW > 1 ? "s" : ""}, ${state.nR} robot${state.nR === 1 ? "" : "s"}, ${tasks.length} sub-tasks · ${sub} · grid lines every 5 min, orange line = makespan`;
+  $("gantt").innerHTML = drawGantt(tasks, b);
+  let h = `<tr><th>Sub-task</th><th>Option</th><th>Executor</th><th class="num">Start–end (min)</th><th class="num">C(i,k)</th><th class="num">Exposure (min)</th></tr>`;
+  tasks.forEach((t, i) => {
+    const it = b.items[i], m = it.mode;
+    const ex = [it.w >= 0 ? `<svg class="ic" aria-hidden="true"><use href="#i-worker"/></svg> Worker ${it.w + 1}` : null, it.r >= 0 ? `<svg class="ic" aria-hidden="true"><use href="#i-robot"/></svg> Robot ${it.r + 1}` : null].filter(Boolean).join(" + ");
+    h += `<tr><td>${t.label}</td><td><span class="chip ${m}">${m}</span></td><td>${ex}</td><td class="num">${it.s}–${it.e}</td><td class="num">${table[i][m].cost.toFixed(3)}</td><td class="num">${t.exp[m]}</td></tr>`;
+  });
+  $("plan").innerHTML = h;
+}
+
+function drawCostTable(tasks, table) {
+  let c = `<tr><th>Sub-task</th><th class="num">W</th><th class="num">R</th><th class="num">HR</th></tr>`;
+  tasks.forEach((t, i) => {
+    const vals = MODES.map((m) => (table[i][m] ? table[i][m].cost : null));
+    const min = Math.min(...vals.filter((v) => v != null));
+    c += `<tr><td>${t.label}</td>` + vals.map((v) => `<td class="num ${v === min ? "best" : ""}">${v == null ? "–" : v.toFixed(3)}</td>`).join("") + `</tr>`;
+  });
+  $("costs").innerHTML = c;
+}
+
+// Scenario rules A–D. In the example they use the slide values; for a loaded project they use
+// the project's λ, and D caps exposure at 85% of scenario C's exposure (rounded down to 5 min).
+function slideSetup() { return !state.project && state.nW === 1 && state.nR === 1 && state.panels === 1; }
+
+function scenRules(dCap) {
+  const p = state.project;
+  const lam = p ? (p.settings.lam || 0.02) : 0.03;
+  const cap = p && p.settings.cap != null ? p.settings.cap : slideSetup() ? 40 : (dCap ?? state.dCap ?? state.cap);
+  return [
+    { k: "A", name: "Cost only", lam: 0.001, zone: false, cap: null },
+    { k: "B", name: "+ makespan", lam, zone: false, cap: null },
+    { k: "C", name: "+ zone rule", lam, zone: true, cap: null },
+    { k: "D", name: `+ exposure cap ${cap}`, lam, zone: true, cap },
+  ];
+}
+
+function applyScenario(k) {
+  const sc = scenRules().find((s) => s.k === k);
+  Object.assign(state, { lam: sc.lam, zone: sc.zone, capOn: sc.cap != null, cap: sc.cap ?? state.cap });
+  render();
+}
+
+function drawMini(tasks, b, nW, nR, tMax) {
+  const lanes = [];
+  for (let i = 0; i < nW; i++) lanes.push({ kind: "w", idx: i, label: nW > 1 ? `W${i + 1}` : "Worker" });
+  for (let i = 0; i < nR; i++) lanes.push({ kind: "r", idx: i, label: nR > 1 ? `R${i + 1}` : "Robot" });
+  const W = 420, left = 72, laneH = 22, gap = 4, top = 2, sx = (W - left - 14) / tMax;
+  const H = top + lanes.length * (laneH + gap) + 14;
+  const tick = tMax <= 120 ? 20 : tMax <= 300 ? 60 : 120;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Timeline, makespan ${b.makespan} minutes">`;
+  for (let t = 0; t <= tMax; t += tick) s += `<text x="${left + t * sx}" y="${H - 2}" font-size="9" fill="var(--muted)" text-anchor="middle">${t}</text>`;
+  lanes.forEach((ln, li) => {
+    const y = top + li * (laneH + gap);
+    s += `<rect x="${left}" y="${y}" width="${W - left - 14}" height="${laneH}" rx="3" fill="var(--lane)"/>`;
+    s += `<use href="#i-${ln.kind === "w" ? "worker" : "robot"}" x="2" y="${y + 3}" width="16" height="16" style="color:var(--muted)"/>`;
+    s += `<text x="${left - 6}" y="${y + 15}" font-size="11" fill="var(--muted)" text-anchor="end">${ln.label}</text>`;
+    b.items.forEach((it) => {
+      if (!((ln.kind === "w" && it.w === ln.idx) || (ln.kind === "r" && it.r === ln.idx))) return;
+      const x = left + it.s * sx + 0.5, w = (it.e - it.s) * sx - 1;
+      s += `<rect x="${x}" y="${y + 1}" width="${w}" height="${laneH - 2}" rx="3" fill="${COL[it.mode]}"/>`;
+      const lbl = `${tasks[it.task].key}·${it.mode}`;
+      if (w > lbl.length * 6) s += `<text x="${x + w / 2}" y="${y + 15}" font-size="10.5" font-weight="600" fill="${INK[it.mode]}" text-anchor="middle">${lbl}</text>`;
+    });
+  });
+  s += `<line x1="${left + b.makespan * sx}" y1="0" x2="${left + b.makespan * sx}" y2="${H - 12}" stroke="var(--accent)" stroke-width="1.5"/>`;
+  return s + `</svg>`;
+}
+
+function renderScenarioCards(tasks, res, rules, nW, nR) {
+  const ok = res.filter(Boolean);
+  const tMaxRaw = Math.max(60, ...ok.map((b) => b.makespan));
+  const tMax = Math.ceil(tMaxRaw / 20) * 20;
+  const modes = (b) => b.items.map((x) => x.mode);
+  let html = "";
+  res.forEach((b, i) => {
+    const sc = rules[i];
+    let chg = "cheapest option per task";
+    if (i > 0) {
+      const p = res[i - 1];
+      if (!b) chg = "no feasible plan";
+      else if (!p) chg = "";
+      else {
+        const mb = modes(b), mp = modes(p);
+        const moved = tasks.map((t, j) => (mb[j] !== mp[j] ? `${t.key} ${mp[j]}→${mb[j]}` : null)).filter(Boolean);
+        const shown = moved.length > 3 ? moved.slice(0, 3).join(", ") + ` +${moved.length - 3} more` : moved.join(", ");
+        const d = b.makespan - p.makespan;
+        chg = (moved.length ? shown : "same options") + (d ? ` · ${d > 0 ? "+" : "−"}${Math.abs(d)} min` : " · same makespan");
+      }
+    }
+    html += `<button type="button" class="mini" data-scen="${sc.k}"><span class="t"><span>${sc.k} · ${sc.name}</span><span>${b ? b.makespan + " min" : "–"}</span></span><span class="chg">${chg}</span>${b ? drawMini(tasks, b, nW, nR, tMax) : '<span class="hint">No feasible plan</span>'}</button>`;
+  });
+  $("scen").innerHTML = html;
+  document.querySelectorAll("[data-scen]").forEach((el) => el.addEventListener("click", () => applyScenario(el.dataset.scen)));
+  const metric = (title, f, fmt) => {
+    const max = Math.max(...ok.map(f), 1e-9);
+    return `<div><h3>${title}</h3>` + res.map((b, i) => {
+      const v = b ? f(b) : null;
+      return `<div class="brow"><span>${rules[i].k}</span><i style="width:${v == null ? 0 : (100 * v) / max}%"></i><span class="n">${v == null ? "–" : fmt(v)}</span></div>`;
+    }).join("") + `</div>`;
+  };
+  $("bars").innerHTML = ok.length ?
+    metric("Makespan (min)", (b) => b.makespan, (v) => v) +
+    metric("Weighted cost Σ C", (b) => b.costInt / 1000, (v) => v.toFixed(3)) +
+    metric("Worker exposure (min)", (b) => b.expo, (v) => v) : "";
+}
+
+async function renderScenarios(seq, ctx) {
+  // ctx.solveOne(sc) -> result or null; ctx.label: crew text; ctx.engine: solver name; ctx.skip: reason to skip
+  if (ctx.skip) { $("scen-sub").textContent = ctx.skip; $("scen").innerHTML = ""; $("bars").innerHTML = ""; return; }
+  $("scen-sub").textContent = `${ctx.label} · computing A–D with ${ctx.engine}…`;
+  try {
+    let rules = scenRules();
+    const res = [];
+    for (const sc of rules.slice(0, 3)) { res.push(await ctx.solveOne(sc)); if (seq !== reqSeq) return; }
+    const keepCap = slideSetup() || (state.project && state.project.settings.cap != null);
+    if (!keepCap && res[2]) state.dCap = Math.max(5, Math.floor((0.85 * res[2].expo) / 5) * 5);
+    rules = scenRules(state.dCap);
+    res.push(await ctx.solveOne(rules[3]));
+    if (seq !== reqSeq) return;
+    $("scen-sub").textContent = `${ctx.label}, current weights, solved with ${ctx.engine}. A–D change only λ, the zone rule and the exposure cap` +
+      (keepCap ? "" : "; D caps exposure at 85% of C") + ". Click a card to open it above.";
+    renderScenarioCards(ctx.tasks(res), res, rules, state.nW, state.nR);
+  } catch (err) {
+    $("scen-sub").textContent = `Could not compare scenarios: ${err.message}`;
+  }
+}
+
+function crewLabel(n) {
+  return `${state.nW} worker${state.nW > 1 ? "s" : ""}, ${state.nR} robot${state.nR === 1 ? "" : "s"}, ${n} sub-tasks`;
+}
+
+async function renderProject() {
+  const seq = ++reqSeq;
+  $("scen-card").hidden = false;
+  $("proj-actions").hidden = false;
+  const body = { nW: state.nW, nR: state.nR, panels: state.panels, lam: state.lam, zone: state.zone, cap: state.capOn ? state.cap : null, weights: state.weights };
+  let out;
+  try {
+    const res = await fetch("/project/solve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    out = await res.json();
+    if (!res.ok) throw new Error(out.error || "server error");
+  } catch (err) {
+    if (seq !== reqSeq) return;
+    setEngine("off", `<b>Could not solve the project.</b> ${err.message}`);
+    return;
+  }
+  if (seq !== reqSeq) return;
+  const tasks = out.tasks.map((t) => ({ id: t.id, key: t.id, label: `${t.id} ${t.name}`,
+    exp: Object.fromEntries(Object.entries(t.opts).map(([k, o]) => [k, o.exp])) }));
+  const table = out.tasks.map((t) => Object.fromEntries(MODES.map((m) => [m, t.opts[m] ? { cost: t.opts[m].cost } : null])));
+  const ok = out.status === "OPTIMAL" || out.status === "FEASIBLE";
+  const eng = out.engine === "CP-SAT" ? "OR-Tools CP-SAT" : out.engine;
+  setEngine("on", `<b>Project: ${state.project.name}</b> · ${out.tasks.length} tasks · solver ${eng} · status ${out.status} in ${(out.seconds * 1000).toFixed(0)} ms${out.message ? " · " + out.message : ""}`);
+  const pill = out.status === "OPTIMAL" ? `<span class="pill ok">Optimal</span>` :
+    out.status === "FEASIBLE" ? `<span class="pill bad">Feasible, not proven</span>` : `<span class="pill bad">No feasible plan</span>`;
+  if (tasks.length) drawCostTable(tasks, table); else $("costs").innerHTML = "";
+  showResult(tasks, table, ok ? out : null, pill, `${eng} ${out.status.toLowerCase()} in ${(out.seconds * 1000).toFixed(0)} ms`);
+  $("proj-download").hidden = !out.resultReady;
+  const call = async (sc) => {
+    const body = { nW: state.nW, nR: state.nR, panels: state.panels, lam: sc.lam, zone: sc.zone, cap: sc.cap, weights: state.weights, write: false };
+    const r = await fetch("/project/solve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const o = await r.json();
+    return (o.status === "OPTIMAL" || o.status === "FEASIBLE") ? o : null;
+  };
+  renderScenarios(seq, {
+    solveOne: call, engine: eng, label: "Your project: " + crewLabel(tasks.length),
+    tasks: (res) => { const a = res.find(Boolean); return a ? a.tasks.map((t) => ({ key: t.id })) : []; },
+    skip: /MILP/.test(out.engine || "") ? "Comparing A–D needs four more solves; with the slower MILP fallback this is skipped. Install ortools for CP-SAT." : null,
+  });
+}
+
+async function loadProject(file) {
+  const st = $("proj-status");
+  st.className = "hint"; st.textContent = `Loading ${file.name}…`;
+  try {
+    const res = await fetch("/project/load", { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-File-Name": file.name }, body: await file.arrayBuffer() });
+    // A static host (e.g. GitHub Pages) answers with an HTML error page, not JSON: treat that as "no local server".
+    const info = await res.json().catch(() => { throw new TypeError("no local server"); });
+    if (!res.ok) throw new Error(info.error || "server error");
+    const s = info.settings;
+    Object.assign(state, { project: info, dCap: null, panels: info.panels, nW: s.nW, nR: s.nR, lam: s.lam, zone: s.zone, capOn: s.cap != null, cap: s.cap ?? state.cap, weights: { ...info.weights } });
+    st.textContent = `${info.name}: ${info.nTasks} tasks loaded` + (info.hasPanels ? ` (${info.panels} panels)` : "") + ". The controls below now change this project.";
+    render();
+  } catch (err) {
+    st.className = "hint err";
+    st.textContent = err instanceof TypeError
+      ? "Loading a project Excel needs the local server (this online page can only run the built-in example). Download the code, run python app.py and open http://localhost:8000."
+      : `Could not read the file: ${err.message}`;
+  }
+}
+
+async function render() {
+  syncControls();
+  if (state.project) { await renderProject(); return; }
+  $("scen-card").hidden = false;
+  $("proj-actions").hidden = true;
+  const seq = ++reqSeq;
+  const tasks = buildTasks(state.panels);
+  const table = costTable(tasks, state.weights);
+  drawCostTable(tasks, table);
+  const cfg = { tasks, weights: state.weights, nW: state.nW, nR: state.nR, lam: state.lam, zone: state.zone, cap: state.capOn ? state.cap : null };
+
+  // In-browser exhaustive search: used as fallback and as a cross-check (up to 6 sub-tasks).
+  let js = null, jsMs = 0;
+  if (tasks.length <= 6) { const t0 = performance.now(); js = solve(cfg); jsMs = Math.round(performance.now() - t0); }
+
+  if (server !== false) {
+    try {
+      const out = await callServer(tasks, table);
+      if (seq !== reqSeq) return;
+      server = true;
+      const ok = out.status === "OPTIMAL" || out.status === "FEASIBLE";
+      let check = "";
+      if (js) {
+        const jsObj = js.best ? js.best.obj : null;
+        check = ok && jsObj === out.obj ? " In-browser search agrees." :
+          (!ok && !js.best) ? " In-browser search agrees: no feasible plan." :
+          ` <b>In-browser search differs</b> (objective ${jsObj ?? "none"} vs ${ok ? out.obj : "none"}).`;
+      }
+      const eng = out.engine === "CP-SAT" ? "OR-Tools CP-SAT" : (out.engine || "CP-SAT");
+      setEngine("on", `<b>Solver: ${eng}</b> (local server) · status ${out.status} in ${(out.seconds * 1000).toFixed(0)} ms.${check}`);
+      const pill = out.status === "OPTIMAL" ? `<span class="pill ok">Optimal</span>` :
+        out.status === "FEASIBLE" ? `<span class="pill bad">Feasible, not proven</span>` : `<span class="pill bad">No feasible plan</span>`;
+      showResult(tasks, table, ok ? out : null, pill, `${eng} ${out.status.toLowerCase()} in ${(out.seconds * 1000).toFixed(0)} ms`);
+      renderScenarios(seq, {
+        engine: eng, label: crewLabel(tasks.length), tasks: () => tasks,
+        solveOne: async (sc) => { const o = await callServer(tasks, table, sc); return (o.status === "OPTIMAL" || o.status === "FEASIBLE") ? o : null; },
+      });
+      return;
+    } catch (err) {
+      if (seq !== reqSeq) return;
+      server = false;
+      serverError = err instanceof TypeError ? "" : err.message;
+    }
+  }
+
+  // Fallback: no CP-SAT server.
+  if (!js) {
+    setEngine("off", `<b>CP-SAT server not running.</b> 3 panels need it: start <code>python app.py</code> and open http://localhost:8000.`);
+    showResult(tasks, table, null, `<span class="pill bad">Needs CP-SAT</span>`, "");
+    $("gantt").innerHTML = `<p class="hint">Nine sub-tasks are too many for the in-browser search. Run the local CP-SAT server, or choose 1 or 2 panels.</p>`;
+    renderScenarios(seq, { skip: "Nine sub-tasks need the CP-SAT server for the A–D comparison too." });
+    return;
+  }
+  setEngine("off", serverError
+    ? `<b>Solver: in-browser exhaustive search.</b> The CP-SAT server answered: ${serverError}. Activate ortools-env and restart <code>python app.py</code>.`
+    : `<b>Solver: in-browser exhaustive search.</b> CP-SAT server not running. To solve with CP-SAT or load your own Excel, run <code>python app.py</code> locally and open http://localhost:8000.`);
+  showResult(tasks, table, js.best, js.best ? `<span class="pill ok">Best plan found</span>` : `<span class="pill bad">No feasible plan</span>`,
+    `${js.checked.toLocaleString()} schedules checked in ${jsMs} ms`);
+  renderScenarios(seq, {
+    engine: "in-browser exhaustive search", label: crewLabel(tasks.length), tasks: () => tasks,
+    solveOne: async (sc) => solve({ ...cfg, lam: sc.lam, zone: sc.zone, cap: sc.cap }).best,
+  });
+}
+
+document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => applyScenario(b.dataset.preset)));
+$("w-dec").onclick = () => { state.nW = Math.max(1, state.nW - 1); render(); };
+$("w-inc").onclick = () => { state.nW = Math.min(3, state.nW + 1); render(); };
+$("r-dec").onclick = () => { state.nR = Math.max(0, state.nR - 1); render(); };
+$("r-inc").onclick = () => { state.nR = Math.min(3, state.nR + 1); render(); };
+$("p-dec").onclick = () => { state.panels = Math.max(1, state.panels - 1); render(); };
+$("p-inc").onclick = () => { state.panels = Math.min(state.project ? 6 : 3, state.panels + 1); render(); };
+$("retry").onclick = () => { server = null; render(); };
+$("proj-file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) loadProject(f); e.target.value = ""; });
+$("proj-exit").onclick = () => { state.project = null; Object.assign(state, { nW: 1, nR: 1, panels: 1, weights: { ...DEFAULT_WEIGHTS } }); $("proj-status").className = "hint"; $("proj-status").textContent = "Fill in project_template.xlsx, then load it here. Works when the page is opened with python app.py."; render(); };
+$("lam").oninput = (e) => { state.lam = +e.target.value; syncControls(); scheduleRender(); };
+$("zone").onchange = (e) => { state.zone = e.target.checked; render(); };
+$("capOn").onchange = (e) => { state.capOn = e.target.checked; render(); };
+$("cap").oninput = (e) => { state.cap = +e.target.value; syncControls(); scheduleRender(); };
+$("resetW").onclick = () => { state.weights = { ...DEFAULT_WEIGHTS }; render(); };
+
+buildWeightSliders();
+render();
+</script>
+</body>
+</html>
